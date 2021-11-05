@@ -1,0 +1,87 @@
+MODULE main
+VAR
+	isBusy_1: boolean;
+	isBusy_2: boolean; 
+	chan1_in: { none, start, stop, data, ack };
+	chan2_in: { none, start, stop, data, ack };
+	self_chan1: { none, stop, data, ack }; 
+	self_chan2: { none, stop, data, ack }; 
+	
+	operator1A:	process operatorA(isBusy_1, isBusy_2, self_chan1, chan2_in);
+	operator1B: process operatorB(chan1_in, self_chan1); 
+	
+	operator2A:	process operatorA(isBusy_2, isBusy_1, self_chan2, chan1_in);
+	operator2B: process operatorB(chan2_in, self_chan2); 
+
+	
+ASSIGN
+	init(isBusy_1) := FALSE;
+	init(isBusy_2) := FALSE;
+	init(chan1_in) := none;
+	init(chan2_in) := none;
+	init(self_chan1) := none; 
+	init(self_chan2) := none;
+	
+	next(global_busy) := 
+		case
+			(self_chan1=none & self_chan2=none & chan1_in=none & chan2_in=none) 		: FALSE;
+			TRUE										: global_busy;
+		esac; 
+		
+MODULE operatorA(me_busy, oth_busy, self_chan, chan_out)
+VAR
+	initiated : boolean;
+	counter :	0..3;
+	limit :		3..3;
+ASSIGN
+	init(initiated) := FALSE; 
+	init(counter)		:= 0; 
+	
+	next(me_busy) :=
+		case
+			(me_busy=FALSE & oth_busy=FALSE)	:TRUE;
+			(self_chan=none)					:FALSE; 
+			TRUE								:me_busy;
+		esac;
+		
+	next(initiated) := 
+		case
+			(me_busy=FALSE & oth_busy=FALSE) 		: TRUE;
+			(chan_out=stop)							: FALSE;
+			TRUE									: initiated;
+		esac;
+	
+	next (counter) := 
+		case
+			(initiated=TRUE & self_chan=ack & counter = 0)		: 1;
+			(initiated=TRUE & counter > 0 & counter < limit) 	: counter + 1;
+			(chan_out=stop)		: 0; 
+			TRUE				: counter;
+		esac;
+	
+	next(chan_out) :=
+		case
+			(self_chan = stop | self_chan=data)						: self_chan;
+			(initiated=FALSE & self_chan=ack)						: ack; 
+			(me_busy=FALSE & oth_busy=FALSE) 						: start;
+			(initiated=TRUE & self_chan=data & counter > 0 & counter < limit)	: data;
+			(initiated=TRUE & self_chan=data & counter > 0 & counter <= limit)	: stop;
+			TRUE								: chan_out;
+		esac;
+		
+	next(self_chan) := none; 
+			
+
+MODULE operatorB(chan_in, self_chan) 
+ASSIGN
+
+	next(self_chan) := 
+		case
+			(chan_in=none)			: none;
+			(chan_in=start) 		: ack;
+			(chan_in=data)			: data;
+			(chan_in=stop)			: stop;
+			(chan_in=ack)			: ack;
+			TRUE					: self_chan; 
+		esac;
+	next(chan_in) := none;
