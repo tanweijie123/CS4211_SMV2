@@ -1,0 +1,29 @@
+MODULE main
+VAR
+	lock : boolean;
+	process1 : process Loop(lock);
+	process2 : process Loop(lock); 
+
+ASSIGN
+	init(lock) := FALSE; 
+	
+MODULE Loop(lock) 
+VAR
+	localkey : boolean; 
+ASSIGN
+	init(localkey) := FALSE; 
+	
+	next(localkey) := 
+		case
+			(localkey=FALSE & lock=FALSE)		:TRUE;
+			(localkey=FALSE & lock=TRUE)		:localkey;
+			(localkey=TRUE) 					:FALSE; 
+		esac;
+	
+	
+	next (lock) := 
+		case
+			(localkey=FALSE & lock=FALSE)		:TRUE;
+			(localkey=FALSE & lock=TRUE)		:lock;
+			(localkey=TRUE) 					:FALSE; 
+		esac;
