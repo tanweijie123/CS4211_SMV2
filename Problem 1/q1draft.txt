@@ -1,0 +1,4 @@
+Q1b.
+
+-- anything that is started will eventually see stop
+check_ltlspec -p "G ( (up[0]=start -> F (up[0]=stop)) & (up[1]=start -> F (up[1]=stop)) & (down[0]=start -> F (down[0]=stop)) & (down[1]=start -> F (down[1]=stop)) )"
