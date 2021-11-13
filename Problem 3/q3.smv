@@ -1,0 +1,45 @@
+MODULE main
+VAR
+	b : array 0..1 of boolean;
+	k : {0, 1};
+	process0 : process Loop(0, b, k);
+	process1 : process Loop(1, b, k); 
+	
+ASSIGN
+	init(b[0]) := FALSE;
+	init(b[1]) := FALSE;
+	init(k) := { 0, 1 };
+
+MODULE Loop(id, b, k)
+VAR
+	state : {c0, c1, crit}; 	-- if process is currently running in c0, c1_not critical or c1_critical
+
+ASSIGN
+	init (state) := c0; 
+
+	next(b[id]) :=
+		case
+			((state = c1) & (k != id & b[1-id] = TRUE)) 	: b[id]; -- return to C1
+			((state = c1) & !(k != id & b[1-id] = TRUE))	: b[id]; -- enters critical section
+			(state = c0)									: TRUE;  -- start of C0
+			(state = crit)									: FALSE; -- exit from critical section
+			TRUE											: b[id]; -- default
+		esac;
+	
+	next(k) :=
+		case
+			(state = c0)	: (1 - id); 
+			TRUE			: k;
+		esac;
+
+	next(state) :=
+		case
+			((state = c1) & (k != id & b[1-id] = TRUE)) 	: c1; -- GOTO to C1
+			((state = c1) & !(k != id & b[1-id] = TRUE))	: crit; -- enters critical section
+			(state = c0)									: c1;  -- finished C0
+			(state = crit)									: c0; -- exit from critical section
+			TRUE											: state; -- unchanged. 
+		esac;
+
+FAIRNESS
+	running

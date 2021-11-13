@@ -1,0 +1,9 @@
+Q3a. 
+
+check_ltlspec -p "G !( (process0.state = crit) & (process1.state = crit) )"
+
+Q3b. 
+
+Starvation free: 
+
+check_ltlspec -p "G ( F (process0.state = crit) & F (process1.state = crit) )"
