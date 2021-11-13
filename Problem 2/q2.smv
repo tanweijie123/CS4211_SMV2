@@ -27,3 +27,5 @@ ASSIGN
 			(localkey=FALSE & lock=TRUE)		:lock;
 			(localkey=TRUE) 					:FALSE; 
 		esac;
+FAIRNESS
+	running

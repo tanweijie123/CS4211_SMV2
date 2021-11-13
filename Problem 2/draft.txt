@@ -4,7 +4,7 @@ check_ltlspec -p "G !( (process1.localkey = TRUE) & (process2.localkey = TRUE) )
 
 Q2b. 
 
-check_ltlspec -p "G (F (process1.localkey = TRUE) & (process2.localkey = TRUE) )"
+check_ltlspec -p "G ( (F (process1.localkey = TRUE)) & (F (process2.localkey = TRUE)) )"
 
   - Thus, process1 locks might have starvation because process2 lock keeps acquring the lock.
   
