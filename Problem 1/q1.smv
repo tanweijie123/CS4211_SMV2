@@ -1,87 +1,117 @@
 MODULE main
 VAR
-	isBusy_1: boolean;
-	isBusy_2: boolean; 
-	chan1_in: { none, start, stop, data, ack };
-	chan2_in: { none, start, stop, data, ack };
-	self_chan1: { none, stop, data, ack }; 
-	self_chan2: { none, stop, data, ack }; 
+	busy : array 0..1 of boolean;
+	up : array 0..1 of { none, start, stop, data, ack };
+	down : array 0..1 of { none, start, stop, data, ack }; 
 	
-	operator1A:	process operatorA(isBusy_1, isBusy_2, self_chan1, chan2_in);
-	operator1B: process operatorB(chan1_in, self_chan1); 
-	
-	operator2A:	process operatorA(isBusy_2, isBusy_1, self_chan2, chan1_in);
-	operator2B: process operatorB(chan2_in, self_chan2); 
-
+	operator1A:	process operator(0, busy, up[1], down[1]);
+	operator1B: process operator(1, busy, up[0], down[0]); 
+	operator2A:	process operator(0, busy, down[0], up[0]); 
+	operator2B: process operator(1, busy, down[1], up[1]); 
 	
 ASSIGN
-	init(isBusy_1) := FALSE;
-	init(isBusy_2) := FALSE;
-	init(chan1_in) := none;
-	init(chan2_in) := none;
-	init(self_chan1) := none; 
-	init(self_chan2) := none;
+	-- Assumes all starts will negative state
 	
-	next(global_busy) := 
-		case
-			(self_chan1=none & self_chan2=none & chan1_in=none & chan2_in=none) 		: FALSE;
-			TRUE										: global_busy;
-		esac; 
-		
-MODULE operatorA(me_busy, oth_busy, self_chan, chan_out)
+	init(busy[0]) := FALSE; 
+	init(busy[1]) := FALSE; 
+	init(up[0]) := none;
+	init(up[1]) := none; 
+	init(down[0]) := none;
+	init(down[1]) := none; 
+
+MODULE operator(id, busy, input, out)
 VAR
-	initiated : boolean;
-	counter :	0..3;
-	limit :		3..3;
+	thisInitiated : boolean;
+	thisListening : boolean; 
+	counter : 0..3; -- count the sending of stop if any ( at 4th ) 
+DEFINE
+	limit := 3; 
+	
 ASSIGN
-	init(initiated) := FALSE; 
-	init(counter)		:= 0; 
-	
-	next(me_busy) :=
+	init(thisInitiated) := FALSE; 
+	init(thisListening) := FALSE; 
+	init(counter) := 0; 
+
+	next(input) :=
 		case
-			(me_busy=FALSE & oth_busy=FALSE)	:TRUE;
-			(self_chan=none)					:FALSE; 
-			TRUE								:me_busy;
-		esac;
-		
-	next(initiated) := 
-		case
-			(me_busy=FALSE & oth_busy=FALSE) 		: TRUE;
-			(chan_out=stop)							: FALSE;
-			TRUE									: initiated;
-		esac;
-	
-	next (counter) := 
-		case
-			(initiated=TRUE & self_chan=ack & counter = 0)		: 1;
-			(initiated=TRUE & counter > 0 & counter < limit) 	: counter + 1;
-			(chan_out=stop)		: 0; 
-			TRUE				: counter;
-		esac;
-	
-	next(chan_out) :=
-		case
-			(self_chan = stop | self_chan=data)						: self_chan;
-			(initiated=FALSE & self_chan=ack)						: ack; 
-			(me_busy=FALSE & oth_busy=FALSE) 						: start;
-			(initiated=TRUE & self_chan=data & counter > 0 & counter < limit)	: data;
-			(initiated=TRUE & self_chan=data & counter > 0 & counter <= limit)	: stop;
-			TRUE								: chan_out;
-		esac;
-		
-	next(self_chan) := none; 
+			(input=none | out != none)											: input; -- other party have not processed.
 			
-
-MODULE operatorB(chan_in, self_chan) 
-ASSIGN
-
-	next(self_chan) := 
-		case
-			(chan_in=none)			: none;
-			(chan_in=start) 		: ack;
-			(chan_in=data)			: data;
-			(chan_in=stop)			: stop;
-			(chan_in=ack)			: ack;
-			TRUE					: self_chan; 
+			(thisInitiated=TRUE & counter=0 & input=ack)						: none; -- consume the input?ack							
+			(thisInitiated=TRUE & counter > 0 & counter <= limit & input=data)	: none; -- consume the input?data 
+			(thisInitiated=TRUE & input=stop)									: none; -- consume the input?stop 
+		
+			(input=start)														: none; -- consume the input?start
+			(thisListening=TRUE & input=data)									: none; -- consume the input?data
+			(thisListening=TRUE & input=stop)									: none; -- consume the input?stop; 
+			
+			TRUE																: input; 
 		esac;
-	next(chan_in) := none;
+		
+	
+	next(out) :=
+		case
+			(busy[id]=FALSE & busy[1-id]=FALSE)									: start; 
+			
+			(input=none | out != none)											: out; -- other party have not processed.
+		
+		
+			(thisInitiated=TRUE & counter=0 & input=ack)						: data; -- start sending data after ack 
+			(thisInitiated=TRUE & counter > 0 & counter < limit & input=data)	: data; -- sending data 1 - 3
+			(thisInitiated=TRUE & counter > 0 & counter <= limit & input=data) 	: stop; -- sending the stop signal
+			(thisInitiated=TRUE & counter > 0 & counter = limit & input=data)	: stop; -- sent max limit. sending stop;
+		
+			(input=start)														: ack; -- reply ack for input?start
+			(thisListening=TRUE & input=data)									: data; -- reply data; 
+			(thisListening=TRUE & input=stop)									: stop; -- reply stop for input?stop
+			
+			
+			TRUE																: out;
+		esac;
+		
+	
+	next(busy[id]) :=
+		case
+			(busy[id]=FALSE & busy[1-id]=FALSE)					: TRUE; --initiate a chat
+			(thisInitiated=TRUE & input=stop)					: FALSE; -- stopped sending
+		
+			(input=start)										: TRUE; -- other operator started chat
+			(thisListening=TRUE & input=stop)					: FALSE; -- other operator ended chat 
+			
+			TRUE												: busy[id];
+		esac; 
+
+	next(thisInitiated) :=
+		case
+			(next(out)=start)									: TRUE; 
+			(thisInitiated=TRUE & input=stop)					: FALSE; -- stopped sending.
+		
+			-- no state change for receiving
+		
+			TRUE												: thisInitiated;
+		esac;
+	
+	next(thisListening) :=
+		case
+			-- no state change for sending
+			
+			(input=start)										: TRUE; 
+			(thisListening=TRUE & input=stop)					: FALSE; 
+			
+			TRUE												: thisListening;
+		esac; 
+
+	next(counter) :=
+		case
+			(input=none | out != none)											: counter; -- other party have not processed.
+			
+			(thisInitiated=TRUE & counter=0 & input=ack)						: 1; -- send the first data. 
+			(thisInitiated=TRUE & counter > 0 & counter < limit & input=data)	: counter + 1;
+			(thisInitiated=TRUE & next(out)=stop)								: 0; -- already sent stop
+		
+			-- no state change for receiving
+		
+			TRUE																: counter; 
+		esac;
+		
+FAIRNESS
+	running
